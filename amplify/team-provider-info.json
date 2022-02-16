@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-rustywordletweb-dev-63332-authRole",
+      "UnauthRoleArn": "arn:aws:iam::283340423557:role/amplify-rustywordletweb-dev-63332-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::283340423557:role/amplify-rustywordletweb-dev-63332-authRole",
+      "Region": "ap-south-1",
+      "DeploymentBucketName": "amplify-rustywordletweb-dev-63332-deployment",
+      "UnauthRoleName": "amplify-rustywordletweb-dev-63332-unauthRole",
+      "StackName": "amplify-rustywordletweb-dev-63332",
+      "StackId": "arn:aws:cloudformation:ap-south-1:283340423557:stack/amplify-rustywordletweb-dev-63332/5ebae820-8ef2-11ec-8704-0a729cf794d6",
+      "AmplifyAppId": "djodp3vg84bbz"
+    },
+    "categories": {
+      "auth": {
+        "rustywordletwebe86fd752": {}
+      }
+    }
+  }
+}
