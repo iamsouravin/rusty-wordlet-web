@@ -6,6 +6,7 @@ backend:
   phases:
     preBuild:
       commands:
+        - npm update -g
         - npm i -g @aws-amplify/cli@${VERSION_AMPLIFY}
     build:
       commands:
