@@ -21,6 +21,14 @@ const INITIAL_GUESSES = [
   [{ letter: EMPTY_CELL, status: CELL_STATUS.InitialEmpty }, { letter: EMPTY_CELL, status: CELL_STATUS.InitialEmpty }, { letter: EMPTY_CELL, status: CELL_STATUS.InitialEmpty }, { letter: EMPTY_CELL, status: CELL_STATUS.InitialEmpty }, { letter: EMPTY_CELL, status: CELL_STATUS.InitialEmpty }],
 ];
 
+const GAME_STATUS = {
+  Invalid: 'Invalid',
+  PlayerWon: 'PlayerWon',
+  GameOver: 'GameOver',
+  Evaluated: 'Evaluated',
+  ToBeEvaluated: 'ToBeEvaluated',
+}
+
 const BUTTONS = [
   [{ text: 'Q' }, { text: 'W' }, { text: 'E' }, { text: 'R' }, { text: 'T' }, { text: 'Y' }, { text: 'U' }, { text: 'I' }, { text: 'O' }, { text: 'P' },],
   [{ text: 'A' }, { text: 'S' }, { text: 'D' }, { text: 'F' }, { text: 'G' }, { text: 'H' }, { text: 'J' }, { text: 'K' }, { text: 'L' },],
@@ -30,36 +38,61 @@ const BUTTONS = [
 const MAX_CHARS = 5;
 const MAX_ATTEMPTS = 5;
 
+function clone_guesses(guesses) {
+  return JSON.parse(JSON.stringify(guesses));
+}
+
 const App = ({ signOut, user }) => {
   const [attempt, setAttempt] = useState(0);
   const [position, setPosition] = useState(0);
-  const [guesses, setGuesses] = useState(INITIAL_GUESSES);
+  const [guesses, setGuesses] = useState(clone_guesses(INITIAL_GUESSES));
   const [gameDataLoaded, setGameDataLoaded] = useState(false);
   const [gameStatus, setGameStatus] = useState('');
+  const [gameExists, setGameExists] = useState(false);
+  const [word, setWord] = useState('');
 
   useEffect(() => {
     if (!gameDataLoaded) {
-      rustyWordletApi.getCurrentGame('1').then(data => {
+      rustyWordletApi.getCurrentGame(user.username).then(data => {
         console.log('received data', data);
         if (data.guesses && data.guesses.length) {
-          let localGuesses = [...guesses];
+          let localGuesses = clone_guesses(INITIAL_GUESSES);
           data.guesses.forEach((guess, rowIndex) => {
-            let len = guess.length;
-            let localGuess = localGuesses[rowIndex];
-            for (let i = 0; i < len; i++) {
-              localGuess[i].letter = guess.charAt(i).toUpperCase();
-            }
+            guess.forEach(guessed_letter => {
+              let cell = localGuesses[rowIndex][guessed_letter.index];
+              cell.letter = guessed_letter.letter.toUpperCase();
+              cell.status = CELL_STATUS[guessed_letter.status];
+            });
           });
+          setWord(data.word.toUpperCase());
+          setGameExists(true);
           setGuesses(localGuesses);
           setAttempt(data.guesses.length);
+          if (data.guesses.length === MAX_ATTEMPTS) {
+            setGameStatus(GAME_STATUS.GameOver);
+          } else if (localGuesses[data.guesses.length - 1].every(cell => cell.status === CELL_STATUS.PresentAtCorrectPlace)) {
+            setGameStatus(GAME_STATUS.PlayerWon);
+          } else {
+            setGameStatus(GAME_STATUS.ToBeEvaluated);
+          }
+        } else if (data.guesses.length === 0) {
+          setGameExists(true);
+          setGuesses(clone_guesses(INITIAL_GUESSES));
+          setAttempt(data.guesses.length);
+          setGameStatus(GAME_STATUS.ToBeEvaluated);
         }
+      }).catch(err => {
+        setWord('');
+        setGameExists(false);
+        setGuesses(clone_guesses(INITIAL_GUESSES));
+        setAttempt(0);
+        setGameStatus(GAME_STATUS.ToBeEvaluated);
       });
       setGameDataLoaded(true);
     }
-  }, [guesses, gameDataLoaded]);
+  }, [guesses, gameDataLoaded, user.username]);
 
   function handleClick(letter) {
-    console.log('position', position);
     if (letter === 'Enter') {
       checkGuess();
     } else if (letter === 'Del') {
@@ -72,16 +105,16 @@ const App = ({ signOut, user }) => {
   function checkGuess() {
     if (attempt < MAX_ATTEMPTS && position === MAX_CHARS) {
       let guess = guesses[attempt].map(guessItem => guessItem.letter.toLowerCase()).join('');
-      rustyWordletApi.checkGuess('1', guess).then(data => {
+      rustyWordletApi.checkGuess(user.username, guess).then(data => {
         console.log('checkGuess:data', data);
         setGameStatus(data.status);
-        if (data.status === 'Invalid') {
+        if (data.status === GAME_STATUS.Invalid) {
           processInvalidGuess();
-        } else if (data.status === 'PlayerWon') {
+        } else if (data.status === GAME_STATUS.PlayerWon) {
           processPlayerWon();
-        } else if (data.status === 'GameOver') {
-          processGameOver();
-        } else if (data.status === 'Evaluated') {
+        } else if (data.status === GAME_STATUS.GameOver) {
+          processGameOver(data);
+        } else if (data.status === GAME_STATUS.Evaluated) {
           processEvaluatedGuess(data);
         }
       });
@@ -89,7 +122,7 @@ const App = ({ signOut, user }) => {
   }
 
   function processInvalidGuess() {
-    let localGuesses = [...guesses];
+    let localGuesses = clone_guesses(guesses);
     localGuesses[attempt].forEach(guessItem => {
       guessItem.status = CELL_STATUS.Invalid;
     });
@@ -97,19 +130,23 @@ const App = ({ signOut, user }) => {
   }
 
   function processPlayerWon() {
-    let localGuesses = [...guesses];
+    let localGuesses = clone_guesses(guesses);
     localGuesses[attempt].forEach(guessItem => {
       guessItem.status = CELL_STATUS.PresentAtCorrectPlace;
     });
     setGuesses(localGuesses);
   }
 
-  function processGameOver() {
-
+  function processGameOver(data) {
+    let localGuesses = clone_guesses(guesses);
+    data.place_matches.forEach(placeMatch => {
+      localGuesses[attempt][placeMatch.index].status = CELL_STATUS[placeMatch.status];
+    });
+    setGuesses(localGuesses);
   }
 
   function processEvaluatedGuess(data) {
-    let localGuesses = [...guesses];
+    let localGuesses = clone_guesses(guesses);
     data.place_matches.forEach(placeMatch => {
       localGuesses[attempt][placeMatch.index].status = CELL_STATUS[placeMatch.status];
     });
@@ -120,10 +157,9 @@ const App = ({ signOut, user }) => {
 
   function deleteLetter() {
     if (position > 0) {
-      let localGuesses = [...guesses];
+      let localGuesses = clone_guesses(guesses);
       let row = localGuesses[attempt];
       let newPosition = position - 1;
-      console.log('newPosition', newPosition);
       row[newPosition].letter = EMPTY_CELL;
       localGuesses[attempt].forEach(item => item.status = CELL_STATUS.InitialEmpty);
       setGuesses(localGuesses);
@@ -134,10 +170,9 @@ const App = ({ signOut, user }) => {
 
   function addLetter(letter) {
     if (position < MAX_CHARS) {
-      let localGuesses = [...guesses];
+      let localGuesses = clone_guesses(guesses);
       let row = localGuesses[attempt];
       let newPosition = position + 1;
-      console.log('newPosition', newPosition);
       row[position].letter = letter;
       setGuesses(localGuesses);
       setPosition(newPosition);
@@ -145,13 +180,15 @@ const App = ({ signOut, user }) => {
   }
 
   function newGameHandler() {
-    rustyWordletApi.newGame('1').then(data => {
+    rustyWordletApi.newGame(user.username).then(data => {
       console.log('newGame', data);
-      let localGuesses = [...INITIAL_GUESSES];
+      let localGuesses = clone_guesses(INITIAL_GUESSES);
+      setWord(data.word.toUpperCase());
+      setGameExists(true);
       setGuesses(localGuesses);
       setPosition(0);
       setAttempt(0);
-      setGameStatus('ToBeEvualted');
+      setGameStatus(GAME_STATUS.ToBeEvaluated);
     });
   }
 
@@ -164,31 +201,45 @@ const App = ({ signOut, user }) => {
         <span style={styles.userEmail}>Hello {user.attributes.email} &nbsp;</span>
         <button onClick={signOut}>Sign out</button>
       </div>
+      <div style={styles.divider}></div>
       <div style={styles.newGameLine}>
-        <button onClick={newGameHandler}>New Game</button>
+        <button onClick={newGameHandler} style={styles.newGameButton}>New Game</button>
       </div>
       <div style={styles.divider}></div>
-      {guesses.map((row, rowIndex) => (
-        <div key={'guesses_' + rowIndex} style={styles.displayGrid}>
-          {row.map((item, itemIndex) => (
-            <input key={'item_' + itemIndex} size={1} maxLength={1} readOnly disabled value={item.letter} style={styles[item.status.style]}></input>
+      {gameExists && (
+        <>
+          {guesses.map((row, rowIndex) => (
+            <div key={'guesses_' + rowIndex} style={styles.displayGrid}>
+              {row.map((item, itemIndex) => (
+                <input key={'item_' + itemIndex} size={1} maxLength={1} readOnly disabled value={item.letter} style={styles[item.status.style]}></input>
+              ))}
+            </div>
           ))}
-        </div>
-      ))}
-      {gameStatus === 'GameOver' && (
-        <div><span style={styles.gameOver}>Game Over</span></div>
+          {gameStatus === GAME_STATUS.GameOver && (
+            <>
+              <div style={styles.gameStatusLine}><span style={styles.gameOver}>Game Over</span></div>
+              <div style={styles.gameStatusLine}><span style={styles.gameOver}>Chosen Word: {word}</span></div>
+            </>
+          )}
+          {gameStatus === GAME_STATUS.PlayerWon && (
+            <div style={styles.gameStatusLine}><span style={styles.playerWon}>You Won</span></div>
+          )}
+          {gameStatus !== GAME_STATUS.GameOver && gameStatus !== GAME_STATUS.PlayerWon &&
+            (
+              <>
+                <div style={styles.divider}></div>
+                {BUTTONS.map((buttonRow, rowIndex) => (
+                  <div key={'buttonRow_' + rowIndex} style={styles.buttonsGrid}>
+                    {buttonRow.map((button, buttonIndex) => (
+                      <button key={'button_' + buttonIndex} onClick={e => handleClick(button.text)}>{button.text}</button>
+                    ))}
+                  </div>
+                ))}
+              </>
+            )
+          }
+        </>
       )}
-      {gameStatus === 'PlayerWon' && (
-        <div><span style={styles.playerWon}>You Won</span></div>
-      )}
-      <div style={styles.divider}></div>
-      {BUTTONS.map((buttonRow, rowIndex) => (
-        <div key={'buttonRow_' + rowIndex} style={styles.buttonsGrid}>
-          {buttonRow.map((button, buttonIndex) => (
-            <button key={'button_' + buttonIndex} onClick={e => handleClick(button.text)}>{button.text}</button>
-          ))}
-        </div>
-      ))}
     </div>
   );
 };
@@ -202,14 +253,16 @@ const styles = {
   userEmail: { fontWeight: 'bold', fontSize: '12px' },
   displayGrid: { margin: 'auto', width: '200px', textAlign: 'center' },
   buttonsGrid: { margin: 'auto', width: '300px', textAlign: 'center' },
-  initialEmpty: { backgroundColor: '#ffffff' },
-  presentInPlace: { backgroundColor: '#A0FFA0' },
-  presentNotInPlace: { backgroundColor: '#edd92b' },
-  notPresent: { backgroundColor: '#c2c2c0' },
-  invalid: { backgroundColor: '#FFA0A0' },
+  initialEmpty: { backgroundColor: '#ffffff', textAlign: 'center' },
+  presentInPlace: { backgroundColor: '#A0FFA0', textAlign: 'center' },
+  presentNotInPlace: { backgroundColor: '#edd92b', textAlign: 'center' },
+  notPresent: { backgroundColor: '#c2c2c0', textAlign: 'center' },
+  invalid: { backgroundColor: '#FFA0A0', textAlign: 'center' },
   divider: { minHeight: '20px' },
   gameOver: { color: 'red' },
   playerWon: { color: 'green' },
+  gameStatusLine: { margin: 'auto', width: '160px', textAlign: 'center' },
+  newGameButton: {},
 };
 
 export default withAuthenticator(App);
