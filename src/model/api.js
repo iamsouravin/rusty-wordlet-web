@@ -18,7 +18,8 @@ const rustyWordletApi = {
                 return response.data;
             })
             .catch(error => {
-                console.log('error.response', error.response);
+                console.log("error.response", error.response);
+                return error.response.status;
             });
     },
     checkGuess: function (userId, guess) {
