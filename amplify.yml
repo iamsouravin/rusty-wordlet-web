@@ -1,7 +1,7 @@
 version: 1
 env:
   variables:
-    VERSION_AMPLIFY: 7.6.20
+    VERSION_AMPLIFY: 7.6.5
 backend:
   phases:
     preBuild:
